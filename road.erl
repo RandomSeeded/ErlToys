@@ -1,17 +1,17 @@
 -module(road).
 -compile(export_all).
 
-main() ->
-  File = "road.txt",
-  {ok, Bin} = file:read_file(File),
-  parse_map(Bin).
+main(Filename) ->
+  {ok, Bin} = file:read_file(Filename),
+  Map = parse_map(Bin),
+  io:format("~p~n", [optimal_path(Map)]),
+  erlang:halt().
 
 parse_map(Bin) when is_binary(Bin) ->
   parse_map(binary_to_list(Bin));
 parse_map(Str) when is_list(Str) ->
   Values = [list_to_integer(X) || X <- string:tokens(Str, "\r\n\t")],
-  Map = group(Values, []),
-  optimal_path(Map).
+  group(Values, []).
 
 % The next step in parsing the map would be to regroup the data into the {A,B,X} form described earlier. Sadly, there's no simple generic way to pull elements from a list 3 at a time, so we'll have to pattern match our way in a recursive function in order to do it:
 % Version 1
