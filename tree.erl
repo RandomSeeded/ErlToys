@@ -1,5 +1,5 @@
 -module(tree).
--export([empty/0, insert/3, lookup/2]).
+-export([empty/0, insert/3, lookup/2, has_val/2]).
 
 % To represent nodes, tuples are an appropriate data structure. For our implementation, we can then define these tuples as {node, {Key, Value, Smaller, Larger}} (a tagged tuple!), where Smaller and Larger can be another similar node or an empty node ({node, nil}). We won't actually need a concept more complex than that.
 
@@ -49,3 +49,24 @@ lookup(Lookup, { node, { Key, _, Smaller, _ } }) when Lookup < Key ->
   lookup(Lookup, Smaller);
 lookup(Lookup, { node, { _, _, _, Larger } }) ->
   lookup(Lookup, Larger).
+
+%% looks for a given value 'Val' in the tree.
+% (exception practice)
+has_val(Target, Node) ->
+  try has_value(Target, Node) of
+    false -> false
+  catch
+    true -> true
+  end.
+
+has_value(_, { node, 'nil' }) ->
+  false;
+has_value(Target, { node, { _, Value, _, _ } }) when Target == Value ->
+  throw(true);
+has_value(Target, { node, { _, _, Smaller, Larger } }) ->
+  % has_value(Target, Smaller) or has_value(Target, Larger).
+  % MORE ERLANG-Y WAY (why?) It's completely equivalent really
+  case has_value(Target, Smaller) of
+    true -> true;
+    false -> has_value(Target, Larger)
+  end.
