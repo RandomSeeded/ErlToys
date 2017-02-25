@@ -51,6 +51,8 @@ init(Server, EventName, DateTime) ->
       to_go=time_to_go(DateTime)}).
 
 % so all these 'functions' really are are interfaces with the running process
+% OK so the point of this is going to be so that we don't have to pipe messages into the thing directly. We don't need to know the format that this little process takes
+% Instead we just invoke the method to deal with that complexity itself
 cancel(Pid) ->
   % This checks to see if the Pid we are going to cancel is already dead
   Ref = erlang:monitor(process, Pid),
