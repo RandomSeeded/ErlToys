@@ -14,14 +14,20 @@ loop(S = #state{}) ->
       NewClients = orddict:store(Ref, Client, S#state.clients),
       Pid ! {MsgRef, ok},
       loop(S#state{clients=NewClients});
-    {Pid, MsgRef, {add, Name, Description, Timeout}} ->
-      EventPid = events:start_link(Name, Timeout),
-      NewEvents = orddict:store({name=Name,
-                                 description=Description,
-                                 pid=EventPid,
-                                 timeout=Timeout}, MsgRef, S#state.events),
-      Pid ! {MsgRef, ok},
-      loop(S#state{events=NewEvents});
+    {Pid, MsgRef, {add, Name, Description, TimeOut}} ->
+      case valid_datetime(TimeOut) of
+        true ->
+          EventPid = event:start_link(Name, TimeOut),
+          NewEvents = orddict:store(Name, #event{name=Name,
+                                                 description=Description,
+                                                 pid=EventPid,
+                                                 timeout=TimeOut}, S#state.events),
+          Pid ! {MsgRef, ok},
+          loop(S#state{events=NewEvents});
+        false ->
+          Pid ! {MsgRef, {error, bad_timeout}},
+          loop(S)
+      end;
     {Pid, MsgRef, {cancel, Name}} ->
       Events = case orddict:find(Name, S#state.events) of
                  {ok, E} ->
@@ -37,7 +43,7 @@ loop(S = #state{}) ->
       case orddict:find(Name, S#state.events) of
         {ok, E} ->
           send_to_clients({done, E#event.name, E#event.description}, S#state.clients),
-          NewEvents = orddist:erase(Name, S#state.events),
+          NewEvents = orddict:erase(Name, S#state.events),
           loop(S#state{events=NewEvents});
         error ->
           loop(S)
@@ -110,7 +116,6 @@ subscribe(Pid) ->
 
 add_event(Name, Description, Timeout) ->
   Ref = make_ref(),
-  % {Pid, MsgRef, {add, Name, Description, Timeout}} ->
   ?MODULE ! {self(), Ref, {add, Name, Description, Timeout}},
   receive
     {Ref, Msg} -> Msg
