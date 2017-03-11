@@ -1,0 +1,28 @@
+- If you have two identical processess communicating with one another, we don't want to use synchronous operations
+  - Because 'synchronous' in erlang means sending a message and waiting for a response, if we were to do this, both would be waiting
+  - This would be deadlock
+  - You could if you wanted alleviate this by giving both a timeout. Both calls would fail, but at least they wouldn't hang forever.
+    - Also, if you did this, you'd then have leftover messages for both of these processes, which would suck. 
+    - Probably best you could do here would be log em and dump em
+  - Therefore just go async
+
+- In the example of negotiate -> negotiate_wait, what if both players hit ready simultaneously?
+  - We both will receive our message AFTER we have entered ourselves into negotiate_wait, so that would work
+
+- What if we receive messages out of order? What if we receive 'READY', and THEN receive 'CHANGE_OFFER'?
+- Probably depends how we actually do the transfer.
+
+- We DON'T move to READY from NEGOTIATE_WAIT though after receiving READY request. Why not?
+  - Because we could declare ourselves as ready, then receive a new offer, then receive a 'ready?' query, and respond not yet.
+  - BUT we declared ourselves as ready, so the other player could have moved to READY state (from NEGOTIATE_WAIT), and be unable to get out.
+
+- SO in order to handle this, we stay in NEGOTIATE_WAIT.
+  - on receipt of 'ready!', we reply with 'ready!'
+  - We then send an ACK, which does ?? (IS ORDERED!!)
+  - And then BOTH move to READY (how does this happen)?
+  - TBC
+
+- When both are in READY, we implement whatever the hell a two-phase-commit is to get all the way there
+  - TBC
+
+
