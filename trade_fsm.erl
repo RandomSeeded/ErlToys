@@ -178,6 +178,82 @@ wait(Event, Data) ->
   unexpected(Event, wait),
   {next_state, wait, Data}.
 
+% Async listener for initial ready state. Will issue sync calls to other FSM.
+ready(ack, S=#state{}) ->
+  case priority(self(), S#state.other) of
+    true ->
+      try
+        notice(S, "asking for commit", []),
+        ready_commit = ask_commit(S#state.other),
+        notice(S, "ordering commit", []),
+        ok = do_commit(S#state.other),
+        notice(S, "committing...", []),
+        commit(S),
+        {stop, normal, S}
+      catch Class:Reason ->
+              notice(S, "commit failed", []),
+              {stop, {Class, Reason}, S}
+      end;
+    false ->
+      {next_state, ready, S} % do nothing, stay in ready state
+  end;
+ready(Event, Data) ->
+  unexpected(Event, ready),
+  {next_state, ready, Data}.
+
+% Sync listeners (from FSMs).
+ready(ask_commit, _From, S) ->
+  notice(S, "replying to ask_commit", []),
+  {reply, ready_commit, ready, S};
+ready(do_commit, _From, S) ->
+  notice(S, "committing...", []),
+  commit(S),
+  {stop, normal, ok, S};
+ready(Event, _From, Data) ->
+  unexpected(Event, ready),
+  {next_state, ready, Data}.
+
+commit(S = #state{}) ->
+  io:format("Transaction completed for ~s. "
+            "Items sent are:~n~p,~n received are:~n~p.~n"
+            "This operation should have some atomic save "
+            "in a database.~n",
+            [S#state.name, S#state.ownitems, S#state.otheritems]).
+
+% Other player cancelled trade, stop the trade.
+handle_event(cancel, _StateName, S=#state{}) ->
+  notice(S, "received cancel event", []),
+  {stop, other_cancelled, S};
+handle_event(Event, StateName, Data) -> % How does this work? Must basically be a try-catch against actual states, and this is only used if no states matched?
+  % No. Handle event is only ever triggered when there was a send_all / sync_send_all. This will not trigger if you do a send_event against a state that does not exist.
+  unexpected(Event, StateName),
+  {next_state, StateName, Data}.
+
+handle_sync_event(cancel, _From, _StateName, S=#state{}) ->
+  notify_cancel(S#state.other),
+  notice(S, "cancelling trade, sending cancel event", []),
+  {stop, cancelled, ok, S};
+handle_sync_event(Event, _From, StateName, Data) ->
+  % This is "let it crash" in action. If we get something unexpected, we won't respond at all. Given that this is a synchronous call, this means our caller will probably crash, eventually, from a timeout.
+  unexpected(Event, StateName),
+  {next_state, StateName, Data}.
+
+handle_info({'DOWN', Ref, process, Pid, Reason}, _, S=#state{other=Pid, monitor=Ref}) ->
+  notice(S, "other side dead", []),
+  {stop, {other_down, Reason}, S};
+handle_info(Info, StateName, Data) ->
+  unexpected(Info, StateName),
+  {next_state, StateName, Data}.
+
+code_change(_OldVsn, StateName, Data, _Extra) ->
+  % Migrations would go here.
+  {ok, StateName, Data}.
+
+terminate(normal, ready, S=#state{}) ->
+  notice(S, "FSM leaving.", []);
+terminate(_Reason, _StateName, _StateData) ->
+  ok.
+
 % Isolate actions from implementations. If we later wanted to not use simple lists, we could simply sub the new implementation into these functions. THATS KINDA CONVENIENT
 % In web dev land, this is where our models come into play
 add(Item, Items) ->
@@ -185,6 +261,12 @@ add(Item, Items) ->
 
 remove(Item, Items) ->
   Items -- [Item].
+
+% Sorting allows us to avoid deadlock; only one pid will have priority and start the two-phase commit
+priority(OwnPid, OtherPid) when OwnPid > OtherPid ->
+  true;
+priority(_OwnPid, _OtherPid) ->
+  false.
 
 % This seems useful...
 notice(#state{name=N}, Str, Args) ->
