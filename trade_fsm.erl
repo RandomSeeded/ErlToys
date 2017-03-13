@@ -79,14 +79,6 @@ notify_cancel(OtherPid) ->
 init(Name) ->
   {ok, idle, #state{name=Name}}.
 
-% This seems useful...
-notice(#state{name=N}, Str, Args) ->
-  io:format("~s: "++Str++"~n", [N|Args]).
-
-% As does this
-unexpected(Msg, State) ->
-  io:format("~p received unknown event ~p while in state ~p~n", [self(), Msg, State]).
-
 idle({ask_negotiate, OtherPid}, S=#state{}) ->
   Ref = monitor(process, OtherPid), % done in case of the other pid dying. What will we do with that?
   notice(S, "~p asked for a trade negotiation", [OtherPid]),
@@ -112,6 +104,7 @@ idle(Event, _From, Data) ->
 % A dumb alternative would be to not expect that and to drop back to idle in the case of anything unexpected, and start from scratch
 idle_wait({ask_negotiate, OtherPid}, S=#state{other=OtherPid}) ->
   gen_fsm:reply(S#state.from, ok),
+  % We use gen_fsm:reply when we are replying to an async call.
   notice(S, "starting negotiation", []),
   {next_state, negotiate, S};
 %The below is the more expected version
@@ -123,10 +116,81 @@ idle_wait(Event, Data) ->
   unexpected(Event, idle_wait),
   {next_state, idle_wait, Data}.
 
+% From our client: tell the other FSM about what our client's action
+negotiate({make_offer, Item}, S=#state{ownitems=OwnItems}) ->
+  do_offer(S#state.other, Item),
+  notice(S, "offering ~p", [Item]),
+  {next_state, negotiate, S#state{ownitems=add(Item, OwnItems)}};
+negotiate({retract_offer, Item}, S=#state{ownitems=OwnItems}) ->
+  undo_offer(S#state.other, Item),
+  notice(S, "cancelling offer on ~p", [Item]),
+  {next_state, negotiate, S#state{ownitems=remove(Item, OwnItems)}};
+% % From the other FSM: notify our user, update our state
+negotiate({do_offer, Item}, S=#state{otheritems=OtherItems}) ->
+  notice(S, "other player offering ~p", [Item]),
+  {next_state, negotiate, S#state{otheritems=add(Item, OtherItems)}};
+negotiate({undo_offer, Item}, S=#state{otheritems=OtherItems}) ->
+  notice(S, "Other player cancelling offer on ~p", [Item]),
+  {next_state, negotiate, S#state{otheritems=remove(Item, OtherItems)}};
+negotiate(are_you_ready, S=#state{other=OtherPid}) ->
+  io:format("Other user ready to trade.~n"),
+  notice(S, "Other user ready to trade goods:~n" 
+         "You get ~p, The other side gets ~p", [S#state.otheritems, S#state.ownitems]),
+  not_yet(OtherPid), % we're not yet ready if we're still in negotiate state.
+  {next_state, negotiate, S}; %This basically separates the reply (not yet ready) from any state transition
+negotiate(Event, Data) ->
+  unexpected(Event, negotiate),
+  {next_state, negotiate, Data}.
+
+% From our client: synchronous! This is because we dont want user to modify offer after claiming readiness
+% This seems not-ideal...now our client is hanging and unable to do anything after he's declared readiness. =/
+negotiate(ready, From, S=#state{other=OtherPid}) ->
+  are_you_ready(OtherPid),
+  notice(S, "asking if ready, waiting", []),
+  {next_state, wait, S#state{from=From}};
+negotiate(Event, _From, S) ->
+  unexpected(Event, negotiate),
+  {next_state, negotiate, S}.
+
+% If the other user changes the deal, we roll back from the wait state back into the negotiate state.
+wait({do_offer, Item}, S=#state{otheritems=OtherItems}) ->
+  gen_fsm:reply(S#state.from, offer_changed),
+  notice(S, "other side offering ~p", [Item]),
+  {next_state, negotiate, S#state{otheritems=add(Item, OtherItems)}};
+wait({undo_offer, Item}, S=#state{otheritems=OtherItems}) ->
+  gen_fsm:reply(S#state.from, offer_changed), % What's the difference between state.from and state.monitor?
+  notice(S, "Other side cancelling offer of ~p", [Item]),
+  {next_state, negotiate, S#state{otheritems=remove(Item, OtherItems)}};
+wait(are_you_ready, S=#state{}) ->
+  am_ready(S#state.other),
+  notice(S, "asked if ready, and I am. Waiting for same reply", []),
+  {next_state, wait, S};
+wait(not_yet, S=#state{}) ->
+  notice(S, "Other not ready yet", []),
+  {next_state, wait, S};
+wait('ready!', S=#state{}) ->
+  am_ready(S#state.other),
+  ack_trans(S#state.other),
+  gen_fsm:reply(S#state.from, ok),
+  notice(S, "other side is ready. Moving to ready state", []),
+  {next_state, ready, S};
+wait(Event, Data) ->
+  unexpected(Event, wait),
+  {next_state, wait, Data}.
+
 % Isolate actions from implementations. If we later wanted to not use simple lists, we could simply sub the new implementation into these functions. THATS KINDA CONVENIENT
+% In web dev land, this is where our models come into play
 add(Item, Items) ->
   [Item | Items].
 
 remove(Item, Items) ->
   Items -- [Item].
+
+% This seems useful...
+notice(#state{name=N}, Str, Args) ->
+  io:format("~s: "++Str++"~n", [N|Args]).
+
+% As does this
+unexpected(Msg, State) ->
+  io:format("~p received unknown event ~p while in state ~p~n", [self(), Msg, State]).
 
