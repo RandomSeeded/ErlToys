@@ -1,6 +1,9 @@
 -module(curling).
 -compile(export_all).
 
+% FUNDAMENTALLY WHAT IS GEN_EVENT?
+% It's a pub-sub model.
+
 start_link(TeamA, TeamB) ->
   {ok, Pid} = gen_event:start_link(),
   %% The scoreboard will always be there
