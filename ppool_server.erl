@@ -61,3 +61,16 @@ handle_info(Msg, State) ->
   io:format("Unknown msg: ~p~n", [Msg]),
   {noreply, State}.
 
+handle_call({run, Args}, _From, S = #state{limit=N, sup=Sup, refs=R}) when N > 0 -> % limit represents the amount of remaining processes that can be added
+  {ok, Pid} = supervisor:start_child(Sup, Args), % this doesn't mean start a supervisor. It means tell the supervisor (Sup) to start a child
+  Ref = erlang:monitor(process, Pid),
+  {reply, {ok, Pid}, S#state{limit=N-1, refs=gb_sets:add(Ref, R)}};
+handle_call({run, _Args}, _From, S=#state{limit=N}) when N =< 0 ->
+  {reply, noalloc, S}; % if we are using run, we don't do anything if we have no workers left in the pool
+handle_call({sync, Args}, _From, S = #state{limit=N, sup=Sup, refs=R}) when N > 0 ->
+  {ok, Pid} = supervisor:start_child(Sup, Args),
+  Ref = erlang:monitor(process, Pid),
+  {reply, {ok, Pid}, S#state{limit=N-1, refs=gb_sets:add(Ref, R)}};
+handle_call({sync, Args}, From, S = #state{queue=Q}) ->
+  {noreply, S#state{queue=queue:in({From, Args}, Q)}}; 
+
