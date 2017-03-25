@@ -26,7 +26,7 @@ start(Name) ->
   gen_fsm:start(?MODULE, [Name], []).
 
 % Gen FSM invokes this
-init(Name) ->
+init(_Name) ->
   {ok, idle, []}.
 
 % Now Gen FSM will call this whenever gen FSM gets hit with an event.
