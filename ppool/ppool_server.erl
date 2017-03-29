@@ -50,6 +50,7 @@ stop(Name) ->
 %   {ok, #state{limit=Limit, refs=gb_sets:empty()}}.
 
 init({Limit, MFA, Sup}) ->
+  io:format("ppol_server init~n"),
   self() ! {start_worker_supervisor, Sup, MFA},
   {ok, #state{limit=Limit, refs=gb_sets:empty()}}. % Now the caller (ppool_sup) can continue.
 

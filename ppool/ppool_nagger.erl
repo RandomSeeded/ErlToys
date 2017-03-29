@@ -3,12 +3,14 @@
 -compile(export_all).
 
 start_link(Task, Delay, Max, SendTo) ->
+  io:format("ppool_nagger start_link~n"),
   gen_server:start_link(?MODULE, {Task, Delay, Max, SendTo}, []).
 
 stop(Pid) ->
   gen_server:call(Pid, stop).
 
 init({Task, Delay, Max, SendTo}) ->
+  io:format("ppol_nagger init~n"),
   {ok, {Task, Delay, Max, SendTo}, Delay}.
 
 handle_call(stop, _From, State) ->
