@@ -82,9 +82,10 @@ handle_cast(_Msg, State) ->
 
 % When do we REMOVE from the queue? When it goes down!
 handle_info({'DOWN', Ref, process, _Pid, _}, S = #state{refs=Refs}) ->
-  io:format("received down msg~n"),
-  case gb_sets:is_element(Refs, Refs) of
+  io:format("received down msg ~n"),
+  case gb_sets:is_element(Ref, Refs) of
     true ->
+      io:format("Handle down worker~n"),
       handle_down_worker(Ref, S);
     false -> % why would we receive a message from something that's not our worker?? Unclear. I think this is just extra safety.
       {noreply, S}
@@ -102,12 +103,14 @@ handle_info(Msg, State) ->
 handle_down_worker(Ref, S = #state{limit=L, sup=Sup, refs=Refs}) ->
   case queue:out(S#state.queue) of
     {{value, {From, Args}}, Q} -> % sync! Now we make sure to reply to unblock that thread.
+      io:format("Handle sync down~n"),
       {ok, Pid} = supervisor:start_child(Sup, Args),
       NewRef = erlang:monitor(process, Pid),
       NewRefs = gb_sets:insert(NewRef, gb_sets:delete(Ref, Refs)),
       gen_server:reply(From, {ok, Pid}),
       {noreply, S#state{refs=NewRefs, queue=Q}};
     {{value, Args}, Q} -> % async, we just start and don't care.
+      io:format("Handle asynd down~n"),
       {ok, Pid} = supervisor:start_child(Sup, Args),
       NewRef = erlang:monitor(process, Pid),
       NewRefs = gb_sets:insert(NewRef, gb_sets:delete(Ref, Refs)),
