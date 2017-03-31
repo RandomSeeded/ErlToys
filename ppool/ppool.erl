@@ -15,7 +15,7 @@ stop_pool(Name) ->
   ppool_supersup:stop_pool(Name).
 
 run(Name, Args) ->
-  ppool_server:run(Name, Args).
+  ppool_serv:run(Name, Args).
 
 async_queue(Name, Args) ->
   ppool_serv:async_queue(Name, Args).

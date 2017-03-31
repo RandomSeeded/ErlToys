@@ -1,4 +1,4 @@
--module(ppool_server).
+-module(ppool_serv).
 -behavior(gen_server).
 -compile(export_all).
 
@@ -90,6 +90,7 @@ handle_info({'DOWN', Ref, process, _Pid, _}, S = #state{refs=Refs}) ->
       {noreply, S}
   end;
 handle_info({start_worker_supervisor, Sup, MFA}, S = #state{}) ->
+  io:format("MFA ~p~n", [MFA]),
   {ok, Pid} = supervisor:start_child(Sup, ?SPEC(MFA)),
   link(Pid),
   {noreply, S#state{sup=Pid}};
