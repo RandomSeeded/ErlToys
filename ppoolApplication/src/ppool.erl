@@ -1,12 +1,21 @@
 % Friendly API
 -module(ppool).
+-behavior(application).
 -compile(export_all).
 
-start_link() ->
-  ppool_supersup:start_link().
+% These are from the original hand-started version
+% start_link() ->
+%   ppool_supersup:start_link().
+% 
+% stop() ->
+%   ppool_supersup:stop().
 
-stop() ->
-  ppool_supersup:stop().
+% Now we can have OTP-app-compatible versions
+start(normal, _Args) ->
+  ppool_supersup:start_link(). % Needs to return {ok, Pid}...but that's the same as what supersup:s_l will do
+
+stop(_State) -> % only does cleanup
+  ok.
 
 start_pool(Name, Limit, {M,F,A}) ->
   ppool_supersup:start_pool(Name, Limit, {M,F,A}).
